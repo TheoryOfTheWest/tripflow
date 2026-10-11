@@ -59,7 +59,7 @@ E2E 自动设置空的第三方凭据，确保测试写入隔离的本地模式�
 ## 当前限制
 
 - 初始 1.0.0 尚未部署；1.0.2 的源码检查与个人网站 Pages 发布已实际成功，详见文末。
-- 未对真实 Supabase / Geoapify 发起请求，未宣称云端登录、跨设备读取或真实步行路线已经通过。
+- 初始 1.0.0 未配置第三方服务；Geoapify 的真实接口已在 1.0.3 验收。Supabase、云端登录与跨设备读取仍未配置。
 - 手机测试为 Chromium 移动模拟，未在实体 iPhone/Safari 验收。
 - 云端离线只读，没有自动离线写入队列；重新读取另一设备的更新需要刷新。
 - 跨天路线几何显示完整路段，未按午夜/GPS时间裁剪；连线清楚标为示意。
@@ -101,4 +101,8 @@ E2E 自动设置空的第三方凭据，确保测试写入隔离的本地模式�
 - 隔离浏览器以正式网站来源加载待发布构建，Geoapify 服务没有模拟：底图瓦片 HTTP 200、图片解码成功；英文地点搜索 HTTP 200、结果可选择并填入表单；步行 Routing HTTP 200、界面明确显示 Geoapify 道路路线。
 - 首次步行接口遇到网络中断并正确降级，诊断重试后全部通过；关闭地图时中止尚未完成的瓦片请求属于按需加载行为。
 - 地图配置随正式静态资源发布，浏览器 Key 可被访问者查看，需要在 Geoapify 控制台配置来源限制。没有修改账户设置或存储方式。
-- 正式网站发布状态与线上复验在完成后追加。
+- 正式 Pages 发布提交 `2e3eb632df3c97501a8beac96d6d07631944767e` 已完成；[Pages 发布工作流](https://github.com/TheoryOfTheWest/TheoryOfTheWest.github.io/actions/runs/38154983924) 为 success。
+- 源码提交 `96a002f685f5d626b434023e7cd11512732dd5c0` 的[自动检查](https://github.com/TheoryOfTheWest/tripflow/actions/runs/38154693314)为 success。
+- 正式地址 release.json 返回 1.0.3 与上述源码提交。隔离浏览器在线复验：全部可见底图瓦片加载、搜索结果选择和道路步行计算通过，瓦片 / 搜索 / Routing 均 HTTP 200，成功复验没有失败请求。
+- 首次线上步行请求出现 ERR_CONNECTION_CLOSED 并明确回退直线估算；重新打开隔离浏览器复验成功。这是观测到的连接中断，不是无条件保证第三方服务可用。
+- 实际截图与不含 Key 的诊断报告保存在 delivery/map-live-v1.0.3.png、map-search-live-v1.0.3.png、map-check-live-v1.0.3.json，未上传公开仓库。

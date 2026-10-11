@@ -124,7 +124,7 @@ VITE_BASE_PATH=/tripflow/
 
 ## 验证范围与维护
 
-具体实测结果见 [TESTING.md](TESTING.md)，模块和模型说明见 [ARCHITECTURE.md](ARCHITECTURE.md)。Supabase 线上登录/真实跨设备读取、Storage 线上策略集成和 Geoapify 真实 API 响应需要你的凭据验收；本地 PostgreSQL RLS 与模拟接口通过不等于这些线上功能已运行。
+具体实测结果见 [TESTING.md](TESTING.md)，模块和模型说明见 [ARCHITECTURE.md](ARCHITECTURE.md)。Geoapify 真实地图、搜索与步行接口已在 1.0.3 配置验收，详情见 TESTING。Supabase 线上登录、真实跨设备读取及 Storage 线上集成仍未配置；本地 PostgreSQL RLS 测试通过不代表云端存储已经运行。
 
 依赖精确版本由 `package-lock.json` 固定，安装请用 `npm ci`。选用兼容 React 19 的 React Leaflet 5、Vite 7、Tailwind 4、Luxon 3、Supabase JS 2、Zod 4；shadcn/ui 风格的 Button/Dialog 源码保留在项目内，基于 Radix，便于直接维护。
 
