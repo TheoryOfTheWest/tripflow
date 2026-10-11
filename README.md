@@ -132,6 +132,8 @@ VITE_BASE_PATH=/tripflow/
 
 ## 验证范围与维护
 
+用户约定（2026-10-12）：后续修改默认不进行正式网站的在线功能验收；只有用户明确要求线上验证时才执行。按改动影响保留必要的本地检查、本地 E2E、构建和资源路径检查，继续正常提交、推送与发布。部署状态可作简短确认，但不再默认打开正式网站运行交互、真实 API、下载/恢复等在线测试，也不为这一步长时间等待或重试。报告区分“本地验证通过”“已推送/部署”与“未做线上功能验收”。
+
 具体实测结果见 [TESTING.md](TESTING.md)，模块和模型说明见 [ARCHITECTURE.md](ARCHITECTURE.md)。Geoapify 真实地图、搜索与步行接口已在 1.0.3 配置验收，详情见 TESTING。Supabase 线上登录、真实跨设备读取及 Storage 线上集成仍未配置；本地 PostgreSQL RLS 测试通过不代表云端存储已经运行。
 
 依赖精确版本由 `package-lock.json` 固定，安装请用 `npm ci`。选用兼容 React 19 的 React Leaflet 5、Vite 7、Tailwind 4、Luxon 3、Supabase JS 2、Zod 4；shadcn/ui 风格的 Button/Dialog 源码保留在项目内，基于 Radix，便于直接维护。
