@@ -83,6 +83,8 @@ VITE_BASE_PATH=/tripflow/
 
 ## Geoapify 配置
 
+1.0.3 个人网站发布已配置 Geoapify 浏览器 Key，真实接口验收结果见 TESTING。更新这个 Key 后需重新构建并执行个人网站挂载发布；仅重启本地服务或推送源码不会更新已发布网站。
+
 在 Geoapify 创建项目并启用地图瓦片、地址自动补全和 Routing API；把浏览器 Key 填入 `VITE_GEOAPIFY_API_KEY`，重启/重新构建。设置允许的 HTTP Referer / Origin，包含实际 GitHub Pages 来源和你需要的本地开发来源，并设置配额提醒。浏览器 Key 是公开的，不能以隐藏前端 Key 代替来源限制。
 
 实现使用：
