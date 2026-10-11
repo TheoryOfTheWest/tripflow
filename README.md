@@ -4,8 +4,22 @@
 
 这是可运行的 React 静态项目，能够部署到 GitHub Pages。无需 Node 后端。**未配置服务时使用 IndexedDB 本地模式，绝不显示为云端已同步。** 默认没有旅行数据；首页可主动载入明确标记的虚构三日验收旅行。
 
+## 本机工作目录与版本管理
+
+本电脑项目已迁移到 `D:\trip flow`。以后从此目录开发、运行和生成构建产物；可双击 `启动TripFlow.cmd` 启动。完整步骤见 [运行、部署与版本管理](docs/运行部署与版本管理.md)，每次版本改进见 [CHANGELOG](CHANGELOG.md)。
+
+PowerShell 启动：
+
+```powershell
+Set-Location -LiteralPath 'D:\trip flow'
+npm.cmd run dev -- --port 5173 --strictPort
+```
+
+浏览器数据不随源码目录移动；保持原地址 `http://127.0.0.1:5173/tripflow/`，无需清除站点数据。
+
 ## 文档入口
 
+- [运行、部署与版本管理](docs/运行部署与版本管理.md)：D 盘运行、GitHub Desktop 同步和版本记录。
 - [用户使用说明书](docs/用户使用说明书.md)：按实际界面介绍旅行、时间线、交通、照片、备份和常见问题。
 - [AI 项目架构与改进指南](docs/AI项目架构与改进指南.md)：供 AI 或开发者接手，包含模型、数据流、关键约束、验证范围和候选改进。
 - [架构概览](ARCHITECTURE.md)与[测试验收记录](TESTING.md)：简明技术说明与已执行结果。
@@ -89,7 +103,7 @@ VITE_BASE_PATH=/tripflow/
 
 普通仓库的本地构建默认基础路径 `/tripflow/`。其他名字可以设置 `VITE_BASE_PATH=/YOUR_REPO/`。工作流 E2E 在默认 `/tripflow/` 路径验收，正式构建再按实际仓库名配置路径。
 
-已生成并验证本地配置，**当前未上传 GitHub、未运行 GitHub 托管工作流、没有已上线 URL**。本环境没有提供仓库授权或第三方凭据。
+初始 1.0.0 交付仅在本地验收。1.0.1 已增加 D 盘工作目录和 Git 版本管理；GitHub 上传、远端工作流与网站发布需分别检查实际状态。Supabase / Geoapify 第三方凭据仍需自行配置。
 
 ## 备份、照片与隐私
 
