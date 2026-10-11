@@ -56,9 +56,14 @@ npm run preview          # 在 HTTP 服务中预览生产版本
 - 九种交通方式；运营商、线路、上下车站、换乘备注、线路历史；换乘可拆成多条记录。
 - 主动计算步行路线、同参数缓存；服务不可用时使用可配置速度的直线粗估，并明确说明局限；估计耗时与实际耗时独立保存。
 - 每日/全程地图、按时间编号、交通站点方形标记、地图返回对应记录。道路实线、用户 GeoJSON GPS 轨迹、顺序虚线明确区分。
+- 开始 / 结束锚定照片在本机提取有效拍摄时间与 GPS，独立预填对应节点；普通附件不解析，缺失信息保留原值。
 - 多图压缩、说明编辑、删除、预览；Canvas 重编码去掉 EXIF/GPS。照片关联活动、交通或独立瞬间。
 - Supabase 邮箱密码登录、每用户私有 RLS、私有 Storage；每段旅行版本冲突检查、本地缓存、离线只读云端内容。
 - JSON 备份与校验导入；含实际照片的完整 ZIP；HTML 旅行报告与打印/PDF。HTML 输出转义用户文字，不执行导入 HTML。
+
+## 用照片填写节点（1.2.0）
+
+新增或编辑记录时，先选择“开始锚定照片 / 结束锚定照片”，根据能提取到的时间、GPS 预填对应字段；核对时区、地点后保存。下方“添加照片”仅添加普通附件，不解析或改动节点。只有一个时间点的“照片 / 备注”只提供开始锚定。具体限制、缺失信息与备份规则见 [用户说明第 7 节](docs/用户使用说明书.md#7-照片与独立随记)。不需要新 API 或账户配置。
 
 ## 完成旅程后保存到电脑（1.1.0）
 
@@ -136,7 +141,7 @@ VITE_BASE_PATH=/tripflow/
 
 具体实测结果见 [TESTING.md](TESTING.md)，模块和模型说明见 [ARCHITECTURE.md](ARCHITECTURE.md)。Geoapify 真实地图、搜索与步行接口已在 1.0.3 配置验收，详情见 TESTING。Supabase 线上登录、真实跨设备读取及 Storage 线上集成仍未配置；本地 PostgreSQL RLS 测试通过不代表云端存储已经运行。
 
-依赖精确版本由 `package-lock.json` 固定，安装请用 `npm ci`。选用兼容 React 19 的 React Leaflet 5、Vite 7、Tailwind 4、Luxon 3、Supabase JS 2、Zod 4；shadcn/ui 风格的 Button/Dialog 源码保留在项目内，基于 Radix，便于直接维护。
+依赖精确版本由 `package-lock.json` 固定，安装请用 `npm ci`。选用兼容 React 19 的 React Leaflet 5、Vite 7、Tailwind 4、Luxon 3、Supabase JS 2、Zod 4、按需加载的 exifr 7.1.3；shadcn/ui 风格的 Button/Dialog 源码保留在项目内，基于 Radix，便于直接维护。
 
 官方文档核对日期：2026-10-11。
 

@@ -146,6 +146,7 @@ export function rebindDocument(doc: TripDocument, ownerId: string, available: Se
       tripId,
       ownerId,
       placeId: ref(e.placeId),
+      endPlaceId: ref(e.endPlaceId),
       originPlaceId: ref(e.originPlaceId),
       destinationPlaceId: ref(e.destinationPlaceId),
       transport: e.transport

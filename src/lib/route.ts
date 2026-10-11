@@ -9,7 +9,7 @@ export function routePoints(doc: TripDocument, date?: string) {
     const refs =
       entry.type === 'transport'
         ? [entry.originPlaceId, entry.destinationPlaceId]
-        : [entry.placeId];
+        : [entry.placeId, entry.endPlaceId];
     refs.forEach((ref, index) => {
       const place = doc.places.find((p) => p.id === ref);
       if (!place) return;

@@ -66,6 +66,7 @@ export const entrySchema = z
     timezone: zone,
     endTimezone: zone,
     placeId: id.optional(),
+    endPlaceId: id.optional(),
     originPlaceId: id.optional(),
     destinationPlaceId: id.optional(),
     activityType: z.string().max(100),
@@ -99,6 +100,7 @@ export const photoSchema = z.object({
   sortOrder: z.number().int().nonnegative(),
   mimeType: z.enum(['image/jpeg', 'image/png', 'image/webp']),
   missing: z.boolean().optional(),
+  anchorRole: z.enum(['start', 'end']).optional(),
 });
 export const tripSchema = z
   .object({
@@ -141,6 +143,7 @@ export const documentSchema = z
     for (const e of doc.entries) {
       for (const ref of [
         e.placeId,
+        e.endPlaceId,
         e.originPlaceId,
         e.destinationPlaceId,
         e.transport?.boardingStationId,
@@ -156,7 +159,18 @@ export const documentSchema = z
       if (start < doc.trip.startDate || end > doc.trip.endDate)
         fail('记录超出旅行日期，请先扩展旅行日期范围');
     }
+    const anchorKeys = new Set<string>();
     for (const p of doc.photos) {
+      if (p.anchorRole) {
+        const key = `${p.entryId}:${p.anchorRole}`;
+        if (!p.entryId || anchorKeys.has(key)) fail('每条记录的开始和结束锚定照片各最多一张');
+        if (
+          p.anchorRole === 'end' &&
+          doc.entries.find((e) => e.id === p.entryId)?.type === 'moment'
+        )
+          fail('独立瞬间没有结束锚定节点');
+        anchorKeys.add(key);
+      }
       if (p.entryId && !entries.has(p.entryId)) fail('照片记录引用不存在');
       if (p.storagePath !== `${doc.trip.ownerId}/${doc.trip.id}/${p.id}`)
         fail('无效的照片存储路径');

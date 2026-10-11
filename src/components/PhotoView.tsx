@@ -18,6 +18,11 @@ export function PhotoView({
       onClick={onClick}
       aria-label={`查看照片：${photo.caption || '旅行照片'}`}
     >
+      {photo.anchorRole && (
+        <span className="photo-anchor-badge">
+          {photo.anchorRole === 'start' ? '开始锚定' : '结束锚定'}
+        </span>
+      )}
       {src ? (
         <img loading="lazy" src={src} alt={photo.caption || '旅行照片'} />
       ) : (

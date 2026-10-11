@@ -19,6 +19,7 @@ src/
   services/repository.ts    Supabase / IndexedDB 持久化与附件
   services/geoapify.ts      独立 PlaceProvider、搜索、路线缓存和粗估
   services/media.ts         图片压缩与元数据去除
+  services/photoMetadata.ts 明确锚定照片的 EXIF / GPS 解析与时区预填
   services/backup.ts        JSON / ZIP 校验、导入重绑定、导出
   services/report.ts        转义后的独立 HTML 旅行报告
 supabase/migrations/        初始 SQL、RLS、Storage、版本检查
@@ -30,7 +31,7 @@ tests/                      Vitest / RTL / 本地 PostgreSQL / Playwright
 
 ## 数据模型
 
-每段旅行是一份 `TripDocument {trip, places[], entries[], photos[], revision}`。逻辑实体包括 Trip、Place、TimelineEntry、内嵌 TransportDetail 和 Photo，字段与任务书对应；额外保存 `endTimezone`、`coverPhotoId`、`mimeType`、`missing`。
+每段旅行是一份 `TripDocument {trip, places[], entries[], photos[], revision}`。逻辑实体包括 Trip、Place、TimelineEntry、内嵌 TransportDetail 和 Photo，字段与任务书对应；额外保存 `endTimezone`、`coverPhotoId`、`mimeType`、`missing`、`endPlaceId?`、`Photo.anchorRole?`。
 
 Supabase 使用 `trips(id uuid, owner_id uuid, data jsonb, revision int, created_at, updated_at)`，将这一份 aggregate 原子保存。这样地点、记录和照片引用不会在多张表写到一半时失配，也适合单用户小应用。数据库索引 `(owner_id, updated_at)`；所有用户内容留在私有数据库和 Storage，不写入 GitHub。
 
@@ -61,6 +62,8 @@ Supabase 使用 `trips(id uuid, owner_id uuid, data jsonb, revision int, created
 ## 私有身份、缓存与照片
 
 Supabase Auth 邮箱密码登录。个人用户在后台建立，关闭新用户注册。客户端仅用 Publishable Key，数据库所有 CRUD 都受 owner RLS 控制。SQL 额外检查 aggregate 内部 owner/trip/path 绑定。Storage Bucket private，按 `auth.uid()/tripId/photoId` 目录限制 SELECT/INSERT/UPDATE/DELETE，允许 JPG/PNG/WebP、最大8MB。
+
+开始 / 结束锚点仅由显式文件入口触发本机解析，普通附件不解析；可选 endPlaceId 与 anchorRole 保存两端和照片角色，v1 备份重绑定两端引用。解析结果只预填有效部分，用户可手动修改；带偏移换算为节点 IANA 时区，无偏移保留钟点并提示。详细规则见 AI 指南第 7.0 节。
 
 照片 Canvas 压缩后作为 Blob 暂存，保存记录时先上传/写附件，再保存文档；上传阶段失败或本地提交失败时补偿删除新文件。云端提交请求可能已经成功但响应丢失，因此提交结果不明确时保留已上传文件，避免误删已被引用的照片；同一编辑窗口重试会复用已上传文件。删除先保存引用变化再清理对象；断网清理失败提示。跨服务不具有分布式事务，异常退出可能留下孤立私有对象，README 说明人工清理方式。
 

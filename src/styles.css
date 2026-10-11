@@ -2575,3 +2575,51 @@ hr {
 .archive-filename {
   overflow-wrap: anywhere;
 }
+
+.anchor-panel {
+  border: 1px solid #dfe5d8;
+  background: #f3f5ee;
+  padding: 16px;
+  border-radius: 10px;
+}
+.anchor-panel > strong {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.anchor-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+  margin: 12px 0;
+}
+.anchor-slot {
+  min-width: 0;
+  background: #fff;
+  border-radius: 8px;
+  padding: 12px;
+}
+.anchor-result {
+  line-height: 1.8;
+  overflow-wrap: anywhere;
+  color: #36584b;
+}
+.photo-thumb {
+  position: relative;
+}
+.photo-anchor-badge {
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  z-index: 1;
+  border-radius: 4px;
+  padding: 2px 5px;
+  background: #294f43;
+  color: #fff;
+  font-size: 10px;
+}
+@media (max-width: 640px) {
+  .anchor-grid {
+    grid-template-columns: 1fr;
+  }
+}

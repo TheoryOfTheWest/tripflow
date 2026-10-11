@@ -72,3 +72,39 @@ describe('validated CRUD and backups', () => {
     ).toThrow();
   });
 });
+
+it('preserves anchor identities and both endpoints when rebinding a v1 backup', () => {
+  const doc = sampleDocument('local-demo');
+  const stay = doc.entries.find((entry) => entry.type === 'stay')!;
+  stay.endPlaceId = doc.places[1].id;
+  doc.photos = [
+    {
+      id: crypto.randomUUID(),
+      ownerId: 'local-demo',
+      tripId: doc.trip.id,
+      entryId: stay.id,
+      takenAt: stay.endAtUtc,
+      storagePath: '',
+      caption: '',
+      sortOrder: 0,
+      mimeType: 'image/jpeg',
+      anchorRole: 'end',
+    },
+  ];
+  doc.photos[0].storagePath = `local-demo/${doc.trip.id}/${doc.photos[0].id}`;
+  const rebound = rebindDocument(documentSchema.parse(doc), 'new-owner', new Set());
+  expect(rebound.entries.find((entry) => entry.id === rebound.photos[0].entryId)?.endPlaceId).toBe(
+    rebound.places[1].id
+  );
+  expect(rebound.photos[0].anchorRole).toBe('end');
+  expect(rebound.photos[0].takenAt).toBe(stay.endAtUtc);
+  expect(() =>
+    documentSchema.parse({
+      ...doc,
+      photos: [...doc.photos, { ...doc.photos[0], id: crypto.randomUUID() }],
+    })
+  ).toThrow('各最多一张');
+  expect(() =>
+    documentSchema.parse({ ...doc, photos: [{ ...doc.photos[0], entryId: null }] })
+  ).toThrow();
+});

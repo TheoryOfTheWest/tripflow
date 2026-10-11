@@ -1,6 +1,6 @@
 # TripFlow：AI 项目架构与改进指南
 
-适用版本：`package.json` 1.1.0 · 代码快照日期：2026-10-12 · 文档版本：1.1
+适用版本：`package.json` 1.2.0 · 代码快照日期：2026-10-12 · 文档版本：1.2
 
 本电脑项目位置：`D:\trip flow`。1.0.1 完成目录迁移与版本管理；1.0.2 增加个人主页挂载发布和无账户服务时的直接使用入口。启动、GitHub Desktop 同步及版本记录见 [运行部署与版本管理](运行部署与版本管理.md)。
 
@@ -78,6 +78,7 @@ src/
   components/
     TripForm.tsx                新建 / 编辑旅行及封面
     EntryForm.tsx               三类记录、独立时区、路线、照片提交
+    AnchorPhotos.tsx            明确的开始 / 结束锚定照片选择与结果提示
     AuthDialog.tsx              邮箱密码登录；缺配置时提示本地模式
     BackupDialog.tsx            备份下载、导入预检与确认
     SaveTripDialog.tsx          当前旅程确认归档、打包状态与下载提示
@@ -88,6 +89,7 @@ src/
     repository.ts              IndexedDB、Supabase CRUD、照片读写和缓存清理
     geoapify.ts                 PlaceProvider、搜索、步行缓存、粗估
     media.ts                    图片验证、Canvas 缩放与重编码
+    photoMetadata.ts            按需 EXIF 解析、严格时间 / GPS 校验和时区预填
     backup.ts                   JSON / ZIP 验证、导出、重绑定导入
     report.ts                   转义后的独立 HTML 报告
 supabase/migrations/             PostgreSQL 初始迁移、RLS、Storage 策略
@@ -120,9 +122,9 @@ TripDocument = {
 | Place           | id、ownerId、tripId、name、address、latitude、longitude、providerPlaceId?、category                                                                                                         | 精确坐标；category 为 place 或 station   |
 | TimelineEntry   | id、ownerId、tripId、type、title、startAtUtc、endAtUtc、timezone、endTimezone、地点引用、activityType、notes、transport?、updatedAt                                                         | type 为 stay、transport 或 moment        |
 | TransportDetail | mode、operatorName、lineName、boardingStationId?、alightingStationId?、transferNotes、estimatedDuration?、estimatedDistance?、actualDuration、routeGeometry?、routeSource、walkingSpeedKmh? | 作为交通记录的内嵌字段，没有单独的交通表 |
-| Photo           | id、ownerId、tripId、entryId、takenAt、storagePath、caption、sortOrder、mimeType、missing?                                                                                                  | 只保存元数据与稳定路径；图片字节独立存储 |
+| Photo           | id、ownerId、tripId、entryId、takenAt、storagePath、caption、sortOrder、mimeType、missing?、anchorRole?                                                                                     | 只保存元数据与稳定路径；图片字节独立存储 |
 
-`entryId` 可为 null，但当前界面添加照片通常归属一条活动、交通或 moment。照片的 `takenAt` 来自记录开始时间，不是自动解析 EXIF。日常上传重编码为 JPEG；模型与 ZIP 同时支持 JPEG / PNG / WebP。
+`entryId` 可为 null，但当前界面添加照片通常归属一条活动、交通或 moment。普通新附件的 `takenAt` 来自记录开始时间；锚定照片分别跟随最终确认的开始 / 结束时间。日常上传重编码为 JPEG；模型与 ZIP 同时支持 JPEG / PNG / WebP。
 
 ### 4.2 修改时必须保留的约束
 
@@ -224,6 +226,18 @@ readonly 条件为云端账户且浏览器离线或当前数据来自失败回�
 冲突时表单保留输入，用户保管未保存内容、刷新读取最新版本，再重新应用修改。当前没有差异对比、三方合并或“强制覆盖”按钮。
 
 ## 7. 照片提交与故障语义
+
+### 7.0 明确选择锚定照片才解析（1.2.0）
+
+`AnchorPhotos` 只负责开始 / 结束单张文件入口和提示；`EntryForm.uploadAnchor` 独立调用 `readAnchorMetadata`，普通 `upload` 仅调用 `compressPhoto`。不要把解析移入通用压缩、照片读取、备份导入或附件批量上传，否则会违反用户只解析明确锚点的要求。
+
+`photoMetadata.ts` 动态加载 [exifr 7.1.3](https://github.com/MikeKovarik/exifr)，仅选取拍摄日期、对应 UTC 偏移及 GPS 标签。`reviveValues: false` 保留原始钟点字符串，避免浏览器本地时区污染。优先 DateTimeOriginal，其次 CreateDate；没有拍摄时间时允许 GPS UTC 日期时间回退。不使用 ModifyDate、文件名、mtime、OCR 或反向地理编码。严格校验日历、24 点、时差上限、DMS 范围和方向；没有完整 GPS 不填坐标，零坐标有效。解析失败仍允许将能解码的图片作为锚定附件保存。
+
+有效偏移先转 UTC，再显示为当前节点 IANA 时区，并保留秒和 DST 偏移选择；没有偏移则只预填钟点，提示按表单时区解释，继续沿用已有 DST 校验。自动填写时间 / 地点相互独立，未知部分不清空原值。先解析和成功压缩，再应用字段。复用相同坐标地点，否则建立坐标占位名称，用户可手动改名定位；不从经纬度猜时区或景点。
+
+新增可选字段 `Photo.anchorRole?: 'start' | 'end'` 与停留记录 `Entry.endPlaceId?`。文档校验限定每记录每角色一张、必须关联记录、moment 不得有结束锚点。交通使用已有起终点引用；停留使用 placeId / endPlaceId，地图与报告包含两端，结束点时间取 endAtUtc。替换锚点保留旧图为普通附件；转 moment 降级结束锚点；删除照片不回滚手动可编辑的节点字段。保存时锚定照片 takenAt 跟随最终节点，原有普通照片 takenAt 保持不变。
+
+字段为 JSONB / IndexedDB 文档的可选增量，不改变数据库表、Dexie 版本和 v1 备份版本；旧数据继续通过校验，导入时重绑定 endPlaceId，照片角色随照片对象保留。旧于 1.2.0 的应用可能忽略新增字段，完整保留需使用新版本恢复。原图只在本机解析，保存图片仍由 Canvas 去除 EXIF；已确认的时间 / 坐标属于旅行文档内容。单记录 12 张限额包括所有锚点，异步处理中防止重复上传 / 保存，继续遵守原有照片补偿语义。
 
 ### 7.1 正常流程
 
@@ -415,7 +429,7 @@ E2E 自动构建并启动隔离测试服务器（4173 端口），明确清空�
 | P1     | 导入预检与部分成功恢复体验                 | BackupDialog、backup                | 用户能看清旅行清单、重复风险、已导入部分；不以标题相同直接覆盖                   |
 | P2     | 地点 / 线路历史的可搜索交互                | EntryForm、MapDialog                | 手机操作稳定，明确当前旅行与历史来源；保持键盘可用                               |
 | P2     | 孤立图片检查与清理工具                     | repository、独立维护工具            | 先只读输出引用和候选文件，排除在途上传；精确清理后正常照片仍可读取               |
-| P2     | 大数据流式备份与分批工具                 | BackupDialog、backup                | 1.1.0 已有单旅程导出；后续提供大文件分批/流式方案，修改限制时同步导入与文档               |
+| P2     | 大数据流式备份与分批工具                   | BackupDialog、backup                | 1.1.0 已有单旅程导出；后续提供大文件分批/流式方案，修改限制时同步导入与文档      |
 | P2     | GPS 按时间分段与更精确每日路线             | 模型、route、MapDialog、backup      | 先加入可验证的时间信息和迁移，再测午夜裁剪；不根据点序号宣称精确时间             |
 
 不要为上表提前大规模升级依赖、拆关系表或引入后端。当前静态架构能满足的需求，优先在现有边界内实现。若需求确实涉及后台任务、服务端私密密钥或大规模查询，再单独论证新的服务边界。

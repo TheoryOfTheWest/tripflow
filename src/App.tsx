@@ -700,6 +700,16 @@ function TripPage({
                           </button>
                         )
                       )}
+                      {e.type === 'stay' && place(e.endPlaceId) && (
+                        <button
+                          className="entry-place"
+                          onClick={() => setMap({ focus: place(e.endPlaceId) })}
+                        >
+                          <MapPin size={14} />
+                          结束 · {place(e.endPlaceId)!.name}
+                          <ArrowRight size={13} />
+                        </button>
+                      )}
                       {(e.timezone !== t.defaultTimezone ||
                         e.endTimezone !== t.defaultTimezone) && (
                         <p className="timezone-detail">

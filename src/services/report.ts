@@ -14,7 +14,7 @@ export function reportHtml(doc: TripDocument, photoSources?: ReadonlyMap<string,
       .map((p) => {
         const src = photoSources?.get(p.id);
         return src
-          ? `<figure><img src="${escape(src)}" alt="${escape(p.caption || '旅途照片')}"><figcaption>${escape(p.caption)}</figcaption></figure>`
+          ? `<figure><img src="${escape(src)}" alt="${escape(p.caption || '旅途照片')}"><figcaption>${p.anchorRole === 'start' ? '开始锚定 · ' : p.anchorRole === 'end' ? '结束锚定 · ' : ''}${escape(p.caption)}</figcaption></figure>`
           : '';
       })
       .join('');
@@ -24,7 +24,7 @@ export function reportHtml(doc: TripDocument, photoSources?: ReadonlyMap<string,
   )
     .map(
       (e) =>
-        `<article><small>${escape(DateTime.fromISO(e.startAtUtc).setZone(e.timezone).toFormat('yyyy-MM-dd HH:mm ZZ'))} — ${escape(DateTime.fromISO(e.endAtUtc).setZone(e.endTimezone).toFormat('yyyy-MM-dd HH:mm ZZ'))} · ${duration(actualSeconds(e))}</small><h2>${escape(e.title)}</h2><p>${escape(e.type === 'transport' ? `${doc.places.find((p) => p.id === e.originPlaceId)?.name || ''} → ${doc.places.find((p) => p.id === e.destinationPlaceId)?.name || ''}\n${e.transport?.lineName || ''}\n${e.transport?.transferNotes || ''}` : doc.places.find((p) => p.id === e.placeId)?.name || '')}</p><p>${escape(e.notes)}</p>${photoSources ? photosHtml(e.id) : `<small>照片 ${doc.photos.filter((p) => p.entryId === e.id).length} 张（完整图片请查看 ZIP 备份）</small>`}</article>`
+        `<article><small>${escape(DateTime.fromISO(e.startAtUtc).setZone(e.timezone).toFormat('yyyy-MM-dd HH:mm ZZ'))} — ${escape(DateTime.fromISO(e.endAtUtc).setZone(e.endTimezone).toFormat('yyyy-MM-dd HH:mm ZZ'))} · ${duration(actualSeconds(e))}</small><h2>${escape(e.title)}</h2><p>${escape(e.type === 'transport' ? `${doc.places.find((p) => p.id === e.originPlaceId)?.name || ''} → ${doc.places.find((p) => p.id === e.destinationPlaceId)?.name || ''}\n${e.transport?.lineName || ''}\n${e.transport?.transferNotes || ''}` : `${doc.places.find((p) => p.id === e.placeId)?.name || ''}${e.endPlaceId ? ` → ${doc.places.find((p) => p.id === e.endPlaceId)?.name || ''}` : ''}`)}</p><p>${escape(e.notes)}</p>${photoSources ? photosHtml(e.id) : `<small>照片 ${doc.photos.filter((p) => p.entryId === e.id).length} 张（完整图片请查看 ZIP 备份）</small>`}</article>`
     )
     .join(
       ''

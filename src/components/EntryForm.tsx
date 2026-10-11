@@ -16,6 +16,7 @@ import {
 import { Modal } from './ui/modal';
 import { Button } from './ui/button';
 import { PhotoView } from './PhotoView';
+import { AnchorPhotos, type AnchorRole } from './AnchorPhotos';
 import {
   modes,
   now,
@@ -32,9 +33,10 @@ import { localInput, sorted, toUtc, duration } from '../lib/time';
 import { message } from '../lib/utils';
 import { geoapify, roughWalk } from '../services/geoapify';
 import { compressPhoto } from '../services/media';
+import { readAnchorMetadata, anchorTimeInput } from '../services/photoMetadata';
 import { putPhoto, deletePhotos, LOCAL_OWNER } from '../services/repository';
 const MapDialog = lazy(() => import('./map/MapDialog'));
-type Pending = { id: string; blob: Blob; caption: string };
+type Pending = { id: string; blob: Blob; caption: string; anchorRole?: AnchorRole };
 function Preview({ blob }: { blob: Blob }) {
   const [url, setUrl] = useState('');
   useEffect(() => {
@@ -123,12 +125,22 @@ export function EntryForm({
       initial ? DateTime.fromISO(initial.endAtUtc).setZone(initial.endTimezone).offset : undefined
     );
   const [draftPlaces, setDraftPlaces] = useState<Place[]>([]),
-    [picker, setPicker] = useState<'place' | 'origin' | 'destination'>();
+    [picker, setPicker] = useState<'place' | 'origin' | 'destination' | 'endPlace'>();
   const [placeId, setPlaceId] = useState(initial?.placeId || '');
+  const [endPlaceId, setEndPlaceId] = useState(initial?.endPlaceId || '');
+  const [anchorNotices, setAnchorNotices] = useState<Partial<Record<AnchorRole, string>>>({});
+  const processingPhoto = useRef(false);
   const [originId, setOriginId] = useState(
-      initial?.originPlaceId || previous?.destinationPlaceId || previous?.placeId || ''
+      initial?.originPlaceId ||
+        initial?.placeId ||
+        previous?.destinationPlaceId ||
+        previous?.endPlaceId ||
+        previous?.placeId ||
+        ''
     ),
-    [destinationId, setDestinationId] = useState(initial?.destinationPlaceId || '');
+    [destinationId, setDestinationId] = useState(
+      initial?.destinationPlaceId || initial?.endPlaceId || ''
+    );
   const [mode, setMode] = useState<Transport['mode']>(initial?.transport?.mode || 'walk');
   const [line, setLine] = useState(initial?.transport?.lineName || ''),
     [operator, setOperator] = useState(initial?.transport?.operatorName || ''),
@@ -155,6 +167,7 @@ export function EntryForm({
   function choose(p: Place) {
     setDraftPlaces((v) => [...v.filter((x) => x.id !== p.id), p]);
     if (picker === 'place') setPlaceId(p.id);
+    else if (picker === 'endPlace') setEndPlaceId(p.id);
     else {
       if (picker === 'origin') setOriginId(p.id);
       else setDestinationId(p.id);
@@ -187,7 +200,8 @@ export function EntryForm({
     }
   }
   async function upload(files: FileList | null) {
-    if (!files) return;
+    if (!files || processingPhoto.current) return;
+    processingPhoto.current = true;
     setPhotoBusy(true);
     setError('');
     try {
@@ -200,7 +214,92 @@ export function EntryForm({
     } catch (e) {
       setError(message(e));
     } finally {
+      processingPhoto.current = false;
       setPhotoBusy(false);
+    }
+  }
+  async function uploadAnchor(role: AnchorRole, file?: File) {
+    if (!file || processingPhoto.current) return;
+    processingPhoto.current = true;
+    setPhotoBusy(true);
+    setError('');
+    try {
+      if (pending.length + photos.length >= 12)
+        throw new Error('每条记录最多 12 张照片，请先移除不需要的附件');
+      const metadata = await readAnchorMetadata(file);
+      const blob = await compressPhoto(file);
+      const notices = [...metadata.warnings];
+      try {
+        const time = anchorTimeInput(metadata, role === 'start' ? startZone : endZone);
+        if (time) {
+          if (role === 'start') {
+            setStart(time.value);
+            setStartOffset(time.offset);
+          } else {
+            setEnd(time.value);
+            setEndOffset(time.offset);
+          }
+          notices.unshift(`已填写${role === 'start' ? '开始' : '结束'}时间；${time.note}`);
+        }
+      } catch (e) {
+        notices.push(message(e));
+      }
+      if (metadata.latitude !== undefined && metadata.longitude !== undefined) {
+        const latitude = metadata.latitude,
+          longitude = metadata.longitude;
+        const existing = allPlaces.find(
+          (p) =>
+            Math.abs(p.latitude - latitude) < 0.0000001 &&
+            Math.abs(p.longitude - longitude) < 0.0000001
+        );
+        const place: Place = existing || {
+          id: uuid(),
+          ownerId: doc.trip.ownerId,
+          tripId: doc.trip.id,
+          name: `${role === 'start' ? '开始' : '结束'}照片地点`,
+          address: `照片 GPS · ${latitude.toFixed(6)}, ${longitude.toFixed(6)}`,
+          latitude,
+          longitude,
+          category: 'place',
+        };
+        if (!existing) setDraftPlaces((places) => [...places, place]);
+        if (role === 'start') {
+          setPlaceId(place.id);
+          setOriginId(place.id);
+        } else {
+          setEndPlaceId(place.id);
+          setDestinationId(place.id);
+        }
+        invalidateEstimate();
+        notices.push(
+          `已填写${role === 'start' ? '开始' : '结束'}地点 GPS 坐标，可通过地图修改名称或位置`
+        );
+      }
+      // Replacing an anchor retains its old image as an ordinary attachment.
+      setPhotos((items) =>
+        items.map((p) => (p.anchorRole === role ? { ...p, anchorRole: undefined } : p))
+      );
+      setPending((items) => [
+        ...items.map((p) => (p.anchorRole === role ? { ...p, anchorRole: undefined } : p)),
+        { id: uuid(), blob, caption: '', anchorRole: role },
+      ]);
+      setAnchorNotices((current) => ({ ...current, [role]: notices.join('。') }));
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      processingPhoto.current = false;
+      setPhotoBusy(false);
+    }
+  }
+  function changeType(next: Entry['type']) {
+    setType(next);
+    if (next === 'moment') {
+      setPhotos((items) =>
+        items.map((p) => (p.anchorRole === 'end' ? { ...p, anchorRole: undefined } : p))
+      );
+      setPending((items) =>
+        items.map((p) => (p.anchorRole === 'end' ? { ...p, anchorRole: undefined } : p))
+      );
     }
   }
   async function loadGPS(file?: File) {
@@ -266,7 +365,10 @@ export function EntryForm({
                 actualDuration: (Date.parse(endAtUtc) - Date.parse(startAtUtc)) / 1000,
               },
             }
-          : { placeId: placeId || undefined }),
+          : {
+              placeId: placeId || undefined,
+              endPlaceId: type === 'stay' ? endPlaceId || undefined : undefined,
+            }),
       };
       if (type === 'stay' && !placeId) throw new Error('请选择或手动创建一个地点');
       if (type === 'transport' && (!originId || !destinationId))
@@ -276,7 +378,8 @@ export function EntryForm({
         tripId: doc.trip.id,
         ownerId: doc.trip.ownerId,
         entryId: entry.id,
-        takenAt: startAtUtc,
+        takenAt: p.anchorRole === 'end' ? endAtUtc : startAtUtc,
+        anchorRole: p.anchorRole,
         storagePath: `${doc.trip.ownerId}/${doc.trip.id}/${p.id}`,
         caption: p.caption,
         sortOrder: photos.length + i,
@@ -293,7 +396,13 @@ export function EntryForm({
         {
           ...doc,
           trip: { ...doc.trip, coverPhotoId },
-          photos: [...remainingPhotos, ...photos, ...freshPhotos],
+          photos: [
+            ...remainingPhotos,
+            ...photos.map((p) =>
+              p.anchorRole ? { ...p, takenAt: p.anchorRole === 'end' ? endAtUtc : startAtUtc } : p
+            ),
+            ...freshPhotos,
+          ],
         },
         entry,
         draftPlaces
@@ -329,7 +438,7 @@ export function EntryForm({
     }
   }
   const locationButton = (
-    kind: 'place' | 'origin' | 'destination',
+    kind: 'place' | 'origin' | 'destination' | 'endPlace',
     value: string,
     label: string
   ) => (
@@ -341,6 +450,7 @@ export function EntryForm({
           value={value}
           onChange={(e) => {
             if (kind === 'place') setPlaceId(e.target.value);
+            else if (kind === 'endPlace') setEndPlaceId(e.target.value);
             else {
               if (kind === 'origin') setOriginId(e.target.value);
               else setDestinationId(e.target.value);
@@ -373,7 +483,7 @@ export function EntryForm({
       <Modal
         title={initial ? '编辑这段时光' : '记录下一段时光'}
         description="地点、路途，或一个值得留下的瞬间。"
-        onClose={() => !busy && onClose()}
+        onClose={() => !busy && !photoBusy && onClose()}
       >
         <form onSubmit={submit} className="form-body">
           <fieldset disabled={busy || routeBusy || photoBusy} className="form-fieldset">
@@ -390,13 +500,22 @@ export function EntryForm({
                   key={t.key}
                   aria-pressed={type === t.key}
                   className={type === t.key ? 'active' : ''}
-                  onClick={() => setType(t.key)}
+                  onClick={() => changeType(t.key)}
                 >
                   <t.icon size={16} />
                   {t.label}
                 </button>
               ))}
             </div>
+            <AnchorPhotos
+              moment={type === 'moment'}
+              selected={{
+                start: [...photos, ...pending].some((p) => p.anchorRole === 'start'),
+                end: [...photos, ...pending].some((p) => p.anchorRole === 'end'),
+              }}
+              notices={anchorNotices}
+              onSelect={(role, file) => void uploadAnchor(role, file)}
+            />
             <label>
               活动名称
               <input
@@ -415,6 +534,7 @@ export function EntryForm({
                 <input
                   aria-label="开始时间"
                   type="datetime-local"
+                  step={1}
                   required
                   value={start}
                   onChange={(e) => {
@@ -429,6 +549,7 @@ export function EntryForm({
                   <input
                     aria-label="结束时间"
                     type="datetime-local"
+                    step={1}
                     required
                     value={end}
                     onChange={(e) => {
@@ -483,6 +604,9 @@ export function EntryForm({
                   placeId,
                   type === 'moment' ? '关联地点（可选）' : '活动地点'
                 )}
+                {type === 'stay' &&
+                  (endPlaceId || [...photos, ...pending].some((p) => p.anchorRole === 'end')) &&
+                  locationButton('endPlace', endPlaceId, '结束地点（可选）')}
                 <label>
                   活动类型
                   <select value={activityType} onChange={(e) => setActivityType(e.target.value)}>
@@ -661,6 +785,7 @@ export function EntryForm({
                   type="file"
                   accept="image/jpeg,image/png,image/webp"
                   multiple
+                  aria-label="普通附件照片"
                   onChange={(e) => {
                     void upload(e.target.files);
                     e.target.value = '';
@@ -669,7 +794,8 @@ export function EntryForm({
               </label>
             </div>
             <p className="small muted">
-              图片压缩至最长边 1800px，并移除 EXIF / GPS 元数据；保存记录时上传。
+              普通附件不解析拍摄时间与地点。所有照片压缩至最长边 1800px，并移除原始 EXIF /
+              GPS；保存记录时写入。
             </p>
             <div className="photo-edit-grid">
               {photos.map((p) => (
@@ -699,6 +825,11 @@ export function EntryForm({
               {pending.map((p) => (
                 <div key={p.id}>
                   <Preview blob={p.blob} />
+                  {p.anchorRole && (
+                    <span className="photo-anchor-badge">
+                      {p.anchorRole === 'start' ? '开始锚定' : '结束锚定'}
+                    </span>
+                  )}
                   <button
                     type="button"
                     className="remove-photo"
@@ -724,7 +855,7 @@ export function EntryForm({
           </fieldset>
           {photoBusy && (
             <p className="small muted" role="status">
-              正在压缩照片…
+              正在处理照片，请保持窗口打开…
             </p>
           )}
           {error && (
@@ -733,7 +864,7 @@ export function EntryForm({
             </p>
           )}
           <footer className="form-footer">
-            <Button type="button" variant="ghost" disabled={busy} onClick={onClose}>
+            <Button type="button" variant="ghost" disabled={busy || photoBusy} onClick={onClose}>
               取消
             </Button>
             <Button type="submit" disabled={busy || photoBusy || routeBusy}>

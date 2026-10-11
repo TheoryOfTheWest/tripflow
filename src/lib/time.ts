@@ -15,7 +15,7 @@ export function toUtc(local: string, timezone: string, offset?: number): string 
   return time.toUTC().toISO()!;
 }
 export const localInput = (utc: string, zone: string) =>
-  DateTime.fromISO(utc).setZone(zone).toFormat("yyyy-MM-dd'T'HH:mm");
+  DateTime.fromISO(utc).setZone(zone).toFormat("yyyy-MM-dd'T'HH:mm:ss");
 export const clock = (utc: string | number, zone: string) =>
   (typeof utc === 'number' ? DateTime.fromMillis(utc) : DateTime.fromISO(utc))
     .setZone(zone)
