@@ -1,6 +1,6 @@
 # 测试与验收记录
 
-验收日期：2026-10-11（Asia/Shanghai）。源代码、锁定依赖、构建产物均在项目中提供。线上服务凭据和 GitHub 授权未提供。
+验收日期：2026-10-11（Asia/Shanghai）。源代码、锁定依赖、构建产物均在项目中提供。初始验收未配置线上服务；GitHub 现已通过用户授权的 Desktop 会话完成实际发布，见文末 1.0.2。
 
 ## 已执行
 
@@ -58,7 +58,7 @@ E2E 自动设置空的第三方凭据，确保测试写入隔离的本地模式�
 
 ## 当前限制
 
-- 未部署，未执行远端 GitHub Actions；工作流已按官方 Pages 文档生成，发布仍需用户仓库权限及 Pages 设置。
+- 初始 1.0.0 尚未部署；1.0.2 的源码检查与个人网站 Pages 发布已实际成功，详见文末。
 - 未对真实 Supabase / Geoapify 发起请求，未宣称云端登录、跨设备读取或真实步行路线已经通过。
 - 手机测试为 Chromium 移动模拟，未在实体 iPhone/Safari 验收。
 - 云端离线只读，没有自动离线写入队列；重新读取另一设备的更新需要刷新。
@@ -82,5 +82,14 @@ E2E 自动设置空的第三方凭据，确保测试写入隔离的本地模式�
 - 从 D 盘运行：Vitest 32 项、Playwright 桌面 / 手机 4 项通过。
 - E2E 增加未配置 Supabase 时登录和连接账户按钮均不出现的断言；原旅行保存刷新、时间线、照片与 ZIP 流程继续通过。
 - TypeScript / Vite 构建与 `/tripflow/` 入口 8 项资源检查通过。
-- 个人网站使用已有 Pages 来源，TripFlow 静态构建挂载到主页仓库 `tripflow/` 子目录；在线实际结果将在发布后补充。
+- 个人网站使用已有 Pages 来源，TripFlow 静态构建挂载到主页仓库 `tripflow/` 子目录；正式上线结果如下。
 - 本次未配置 Supabase、Geoapify，未实现跨设备免登录同步或任意附件云端文件柜。源码首次推送已核对远端 main 提交，不代表私人数据上传。
+
+### 正式线上验收
+
+- 源码提交：`64215b647dd9ad898507d5aef0c3e09a23034315`；[源码 Actions](https://github.com/TheoryOfTheWest/tripflow/actions/runs/38140490999) 结果 success。
+- 网站发布提交：`46a717061ab1df669b042d881de5c390f6810945`；[Pages 构建部署](https://github.com/TheoryOfTheWest/TheoryOfTheWest.github.io/actions/runs/38140639361) 结果 success。
+- 正式主页 HTTP 200，导航与工具卡片共两个 `/tripflow/` 入口；实际点击进入应用，无登录按钮，无页面脚本错误。
+- 隔离浏览器在正式地址创建虚构旅行，刷新后读取成功；另外载入虚构示例，照片刷新后可读，完整 ZIP 内含实际图片字节。
+- `/tripflow/release.json` 返回 1.0.2 与上述源码提交。截图在本机 delivery/personal-site-live.png 和 tripflow-live.png，不提交进公开仓库。
+- 本次验收保存的是隔离浏览器数据，没有把用户旧行程迁移至线上，也没有验证不存在的云端同步。
