@@ -1015,12 +1015,12 @@ function AppContent() {
                 {user.email?.[0].toUpperCase()}
                 <LogOut size={12} />
               </button>
-            ) : (
+            ) : supabase ? (
               <Button variant="outline" size="sm" onClick={() => setAuth(true)}>
                 <LogIn size={15} />
                 <span>登录</span>
               </Button>
-            )}
+            ) : null}
           </div>
         </div>
       </header>
@@ -1032,10 +1032,12 @@ function AppContent() {
         <div className="mode-banner">
           <span className="status-dot" />
           本地模式 · 记录仅保存在当前浏览器，尚未上传云端。
-          <button onClick={() => setAuth(true)}>
-            连接个人账户
-            <ArrowRight size={12} />
-          </button>
+          {supabase && (
+            <button onClick={() => setAuth(true)}>
+              连接个人账户
+              <ArrowRight size={12} />
+            </button>
+          )}
         </div>
       )}
       {!online && (

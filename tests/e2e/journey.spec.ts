@@ -7,6 +7,8 @@ test('create, map-select, reorder, route, back up, restore and delete a private 
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(e.message));
   await page.goto('./');
+  await expect(page.getByRole('button', { name: '登录', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '连接个人账户' })).toHaveCount(0);
   await expect(page.getByRole('heading', { name: '你的下一段故事，从这里开始' })).toBeVisible();
   await page.screenshot({ path: `test-results/${info.project.name}-home.png`, fullPage: true });
   await page.getByRole('button', { name: '开启一段旅程' }).click();

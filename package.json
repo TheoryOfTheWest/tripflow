@@ -1,7 +1,7 @@
 {
   "name": "tripflow",
   "private": true,
-  "version": "1.0.1",
+  "version": "1.0.2",
   "type": "module",
   "engines": {
     "node": ">=22.12.0"
@@ -15,7 +15,8 @@
     "test:e2e": "playwright test",
     "check": "tsc -b",
     "format": "prettier --write src tests scripts *.ts *.json *.md .github/workflows",
-    "check:pages": "node scripts/check-pages.mjs"
+    "check:pages": "node scripts/check-pages.mjs",
+    "stage:site": "npm run build && npm run check:pages && node scripts/stage-personal-site.mjs"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.6",

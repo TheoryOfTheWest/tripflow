@@ -93,17 +93,20 @@ VITE_BASE_PATH=/tripflow/
 
 距离为米，耗时为秒，几何坐标为 `[longitude, latitude]`。不调用公共 Nominatim 自动补全。地图仅打开时请求瓦片；步行仅点击“计算步行”时请求。保留 Leaflet 署名；本版报告不导出地图截图。未配置 Key 时显示坐标网格，并允许手动填写坐标。不要将该网格当成真实底图。
 
-## GitHub Pages 部署
+## 个人网站挂载与发布
 
-1. 新建独立仓库 `tripflow`，把**这个项目文件夹的内容**提交到仓库根目录，主分支使用 `main`。不要上传 node_modules、.env、私人备份、测试截图和个人照片，不要覆盖个人主页仓库。
-2. 仓库 Settings → Pages → Build and deployment → Source 选择 **GitHub Actions**。
-3. Settings → Secrets and variables → Actions → **Variables** 添加 `VITE_SUPABASE_URL`、`VITE_SUPABASE_PUBLISHABLE_KEY`、`VITE_GEOAPIFY_API_KEY`。这些均是浏览器公开配置，不得填写特权 Key。留空会部署成本地模式。
-4. 推送到 `main` 或手动运行 Deploy 工作流。流程安装锁定依赖、运行全部单元/数据库测试和桌面/手机 E2E、生产构建、上传 dist 并发布。
-5. 成功后打开 `https://USERNAME.github.io/tripflow/`。工作流自动采用仓库名作基础路径；若仓库名确为 `USERNAME.github.io`，自动切为 `/`。路由使用 `#/trip/ID?date=...`，刷新子页面不会要求 GitHub Pages 服务器回退。
+目标入口：[个人主页](https://theoryofthewest.github.io/) → TripFlow；应用地址为 `https://theoryofthewest.github.io/tripflow/`。
 
-普通仓库的本地构建默认基础路径 `/tripflow/`。其他名字可以设置 `VITE_BASE_PATH=/YOUR_REPO/`。工作流 E2E 在默认 `/tripflow/` 路径验收，正式构建再按实际仓库名配置路径。
+- 源码与说明文档：`TheoryOfTheWest/tripflow`，本机 `D:\trip flow`。
+- 网站发布仓库：`TheoryOfTheWest/TheoryOfTheWest.github.io`，本机 `D:\trip flow\work\personal-site`。
+- 首页保留原有个人介绍，增加导航链接与 TripFlow 卡片。构建仅复制到网站的 `tripflow/` 子目录。
+- 不需要访问者登录；未配置 Supabase 时隐藏账户入口，旅行和照片保存在当前浏览器。网页托管并不等于私人数据已上传云端。
 
-初始 1.0.0 交付仅在本地验收。1.0.1 已增加 D 盘工作目录和 Git 版本管理；GitHub 上传、远端工作流与网站发布需分别检查实际状态。Supabase / Geoapify 第三方凭据仍需自行配置。
+更新源码并提交后，在 D 盘执行 `npm run stage:site`，检查个人网站仓库的差异、提交并推送。脚本核对目标仓库和 `/tripflow/` 资源路径，只复制静态构建，不复制 `.env`、私人备份或浏览器数据库。网站的 `tripflow/release.json` 标注版本与源码提交。
+
+源码仓库 Actions 默认运行测试并保存构建产物。当前采用已有个人网站的 Pages 发布来源，无需为同一路径再启用第二个 Pages 项目。未来若改为独立仓库 Pages，先在 Settings → Pages 选择 GitHub Actions，并设置 Actions Variable `DEPLOY_STANDALONE_PAGES=true`，再运行现有工作流；不要同时使用两套发布方式。
+
+完整操作与保存限制见 [在线使用与发布说明](docs/在线使用与发布说明.md)。发布状态以实际远端页面为准。
 
 ## 备份、照片与隐私
 

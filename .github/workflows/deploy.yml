@@ -1,4 +1,4 @@
-name: Test and deploy TripFlow to GitHub Pages
+name: Test and build TripFlow (optional standalone Pages)
 on:
   push:
     branches: [main]
@@ -33,11 +33,18 @@ jobs:
           VITE_SUPABASE_URL: ${{ vars.VITE_SUPABASE_URL }}
           VITE_SUPABASE_PUBLISHABLE_KEY: ${{ vars.VITE_SUPABASE_PUBLISHABLE_KEY }}
           VITE_GEOAPIFY_API_KEY: ${{ vars.VITE_GEOAPIFY_API_KEY }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: tripflow-site
+          path: dist
       - uses: actions/configure-pages@v5
+        if: vars.DEPLOY_STANDALONE_PAGES == 'true'
       - uses: actions/upload-pages-artifact@v4
+        if: vars.DEPLOY_STANDALONE_PAGES == 'true'
         with:
           path: dist
   deploy:
+    if: vars.DEPLOY_STANDALONE_PAGES == 'true'
     environment:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
