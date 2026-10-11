@@ -2563,3 +2563,15 @@ hr {
     color: #444;
   }
 }
+
+/* Journey archive controls remain reachable on narrow screens. */
+.trip-heading-actions {
+  flex-wrap: wrap;
+}
+.archive-steps {
+  padding-left: 22px;
+  line-height: 1.9;
+}
+.archive-filename {
+  overflow-wrap: anywhere;
+}

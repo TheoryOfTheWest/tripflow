@@ -4,6 +4,7 @@ import { Modal } from './ui/modal';
 import { Button } from './ui/button';
 import type { TripDocument } from '../models';
 import { backupData, download, exportZip, readBackup, importBackup } from '../services/backup';
+import { LOCAL_OWNER } from '../services/repository';
 import { message } from '../lib/utils';
 export function BackupDialog({
   docs,
@@ -127,10 +128,21 @@ export function BackupDialog({
             <p>
               已校验 {staged.backup.documents.length} 段旅行、{staged.blobs.size} 个照片文件。
             </p>
+            <ul className="archive-steps small">
+              {staged.backup.documents.map((doc) => (
+                <li key={doc.trip.id}>
+                  {doc.trip.title} · {doc.trip.startDate} — {doc.trip.endDate}
+                </li>
+              ))}
+            </ul>
             <p className="small">
-              {staged.blobs.size === 0
-                ? 'JSON 仅恢复照片引用，图片会标记为待恢复。'
-                : '图片将上传至当前账户的私有存储。'}
+              {staged.backup.documents.some((doc) =>
+                doc.photos.some((photo) => !staged.blobs.has(photo.id))
+              )
+                ? '此文件只包含部分照片引用，缺少的图片会标记为待恢复。'
+                : ownerId === LOCAL_OWNER
+                  ? '记录和照片将保存在当前浏览器，导入后可直接查看和编辑。'
+                  : '记录与图片将保存到当前账户的私有云端空间。'}
             </p>
             <Button disabled={busy || readonly} onClick={restore}>
               确认导入为新旅行

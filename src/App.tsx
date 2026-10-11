@@ -51,6 +51,7 @@ import { EntryForm } from './components/EntryForm';
 import { PhotoView } from './components/PhotoView';
 import { AuthDialog } from './components/AuthDialog';
 import { BackupDialog } from './components/BackupDialog';
+import { SaveTripDialog } from './components/SaveTripDialog';
 import {
   LOCAL_OWNER,
   supabase,
@@ -107,12 +108,14 @@ function Home({
   ownerId,
   readonly,
   onNew,
+  onImport,
   onNotice,
 }: {
   store: Store;
   ownerId: string;
   readonly: boolean;
   onNew: () => void;
+  onImport: () => void;
   onNotice: (s: string) => void;
 }) {
   const [query, setQuery] = useState(''),
@@ -190,6 +193,10 @@ function Home({
             </h2>
           </div>
           <div className="collection-tools">
+            <Button variant="outline" onClick={onImport} disabled={readonly}>
+              <ArrowDownToLine size={17} />
+              导入旅程
+            </Button>
             <div className="search-field">
               <Search size={16} />
               <input
@@ -307,7 +314,8 @@ function TripPage({
   const [confirm, setConfirm] = useState<Entry | 'trip'>(),
     [deleting, setDeleting] = useState(false),
     [deleteError, setDeleteError] = useState(''),
-    [overview, setOverview] = useState(false);
+    [overview, setOverview] = useState(false),
+    [saveTrip, setSaveTrip] = useState(false);
   if (store.loading)
     return (
       <main className="page-width loading-card">
@@ -415,6 +423,10 @@ function TripPage({
           </div>
         </div>
         <div className="trip-heading-actions">
+          <Button size="sm" onClick={() => setSaveTrip(true)}>
+            <Download size={15} />
+            保存旅程到电脑
+          </Button>
           <Button variant="outline" size="sm" onClick={() => setOverview(true)}>
             <FileText size={15} />
             旅行概览
@@ -776,6 +788,7 @@ function TripPage({
           </Button>
         </footer>
       </section>
+      {saveTrip && <SaveTripDialog doc={doc} onClose={() => setSaveTrip(false)} />}
       {editTrip && (
         <TripForm doc={doc} ownerId={t.ownerId} onClose={() => setEditTrip(false)} onSave={save} />
       )}
@@ -1064,6 +1077,7 @@ function AppContent() {
                 ownerId={ownerId}
                 readonly={readonly}
                 onNew={() => setNewTrip(true)}
+                onImport={() => setBackup(true)}
                 onNotice={setToast}
               />
             }

@@ -1,4 +1,5 @@
 import JSZip from 'jszip';
+import { reportHtml } from './report';
 import { backupSchema, documentSchema, now, uuid, type Backup, type TripDocument } from '../models';
 import { getPhotoBlob, putPhoto, saveDocument, deletePhotos } from './repository';
 export function backupData(documents: TripDocument[]): Backup {
@@ -12,15 +13,64 @@ export function download(blob: Blob, name: string) {
   link.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
-export async function exportZip(documents: TripDocument[]) {
+const archiveExtras = ['旅程回顾.html', '使用说明.txt'];
+async function createZip(documents: TripDocument[], bounded = false) {
   const zip = new JSZip();
-  zip.file('tripflow.json', JSON.stringify(backupData(documents), null, 2));
+  const json = JSON.stringify(backupData(documents), null, 2);
+  let expanded = new Blob([json]).size;
+  if (bounded && expanded > 10 * 1024 * 1024)
+    throw new Error('旅程数据超过单文件 10 MB 上限，请分段保存');
+  zip.file('tripflow.json', json);
   for (const doc of documents)
     for (const p of doc.photos) {
       // Fail loudly instead of silently producing an incomplete "full" backup.
-      zip.file(`photos/${p.id}`, await (await getPhotoBlob(p)).arrayBuffer());
+      const blob = await getPhotoBlob(p);
+      if (bounded && blob.size > 8 * 1024 * 1024)
+        throw new Error('单张照片超过 8 MB，无法生成可恢复的旅程文件');
+      expanded += blob.size;
+      if (bounded && expanded > 200 * 1024 * 1024)
+        throw new Error('旅程内容超过 200 MB，请分段保存');
+      zip.file(`photos/${p.id}`, await blob.arrayBuffer());
     }
+  return { zip, expanded };
+}
+export async function exportZip(documents: TripDocument[]) {
+  const { zip } = await createZip(documents);
   return zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+}
+export function tripArchiveName(doc: TripDocument, savedAt = now()) {
+  const title =
+    doc.trip.title
+      .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
+      .slice(0, 70)
+      .replace(/[. ]+$/g, '') || '旅程';
+  return `TripFlow_${title}_${doc.trip.startDate}_${doc.trip.endDate}_${savedAt.replace(/[:.]/g, '-')}.zip`;
+}
+export async function exportTripArchive(document: TripDocument) {
+  const doc = documentSchema.parse(document);
+  const { zip, expanded } = await createZip([doc], true);
+  const html = reportHtml(doc, new Map(doc.photos.map((p) => [p.id, `photos/${p.id}`])));
+  const instructions = `TripFlow 旅程收藏：${doc.trip.title}
+
+直接阅读：解压整个 ZIP，双击“旅程回顾.html”。请保留旁边的 photos 文件夹，照片才能显示。阅读记录与照片不需要联网或启动 TripFlow；地图底图不在文件中。
+
+继续编辑：启动本地 TripFlow（本机 D:\\trip flow 中的“启动TripFlow.cmd”），点击首页“导入旅程”，选择原 ZIP，再点击“确认导入为新旅行”。正式网站也可以导入。使用 1.1.0 或更新版本导入本收藏包。
+
+文件内容：tripflow.json 保存完整旅行数据；photos 保存网站中的照片文件（压缩版本）；旅程回顾.html 用于阅读；使用说明.txt 为本文件。
+
+导入不会覆盖已有旅行，重复导入会创建副本。归档只包含点击确认时已保存的内容，后续修改请重新下载。请在浏览器下载列表确认 ZIP 已落盘。
+`;
+  const htmlSize = new Blob([html]).size;
+  if (
+    htmlSize > 10 * 1024 * 1024 ||
+    expanded + htmlSize + new Blob([instructions]).size > 200 * 1024 * 1024
+  )
+    throw new Error('旅程内容超过备份容量上限，请分段保存');
+  zip.file(archiveExtras[0], html);
+  zip.file(archiveExtras[1], instructions);
+  const blob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE' });
+  if (blob.size > 100 * 1024 * 1024) throw new Error('旅程 ZIP 超过 100 MB 导入上限，请分段保存');
+  return blob;
 }
 function photoMime(bytes: Uint8Array) {
   if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) return 'image/jpeg';
@@ -42,7 +92,8 @@ export async function readBackup(
   }
   const zip = await JSZip.loadAsync(await file.arrayBuffer(), { checkCRC32: false });
   const files = Object.values(zip.files).filter((f) => !f.dir);
-  if (files.length > 5001) throw new Error('ZIP 文件数过多');
+  const extraCount = files.filter((f) => archiveExtras.includes(f.name)).length;
+  if (files.length > 5001 + extraCount) throw new Error('ZIP 文件数过多');
   // Reject decompression bombs before inflate using central-directory sizes.
   let expanded = 0;
   for (const f of files) {
@@ -57,6 +108,7 @@ export async function readBackup(
   const blobs = new Map<string, Blob>();
   const allowed = new Set([
     'tripflow.json',
+    ...archiveExtras, // Optional reading aids are never rendered or executed during import.
     ...backup.documents.flatMap((d) => d.photos.map((p) => `photos/${p.id}`)),
   ]);
   for (const f of files) if (!allowed.has(f.name)) throw new Error(`ZIP 含未识别文件：${f.name}`);
