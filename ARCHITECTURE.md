@@ -19,7 +19,8 @@ src/
   services/repository.ts    Supabase / IndexedDB 持久化与附件
   services/geoapify.ts      独立 PlaceProvider、搜索、路线缓存和粗估
   services/media.ts         图片压缩与元数据去除
-  services/photoMetadata.ts 明确锚定照片的 EXIF / GPS 解析与时区预填
+  services/photoMetadata.ts 显式锚点 / 批量模式的 EXIF / GPS 解析
+  services/photoTimeline.ts UTC 分组、首尾锚点、地名及追加文档
   services/backup.ts        JSON / ZIP 校验、导入重绑定、导出
   services/report.ts        转义后的独立 HTML 旅行报告
 supabase/migrations/        初始 SQL、RLS、Storage、版本检查
@@ -51,7 +52,7 @@ Supabase 使用 `trips(id uuid, owner_id uuid, data jsonb, revision int, created
 
 ## 地图和路线
 
-`PlaceProvider` 提供 search / walk，Geoapify 是默认实现。地点结果只保存所需名称/地址/精确坐标/provider ID，复用已保存地点；修改已选坐标会清掉失配的 provider ID。搜索450ms防抖、取消旧请求、15秒超时。公共 Nominatim 没有被使用。
+`PlaceProvider` 提供 search / reverse / walk，Geoapify 是默认实现。地点结果只保存所需名称/地址/精确坐标/provider ID，复用已保存地点；修改已选坐标会清掉失配的 provider ID。搜索450ms防抖、取消旧请求、15秒超时。公共 Nominatim 没有被使用。
 
 路线请求只由按钮触发，按起终点精确坐标缓存，最多100项。API 的 GeoJSON MultiLineString 存储为经度在前；Leaflet 渲染时交换为纬度在前。返回的米/秒与实际记录秒数分开。失败时显示直线距离除可配置步行速度的粗略结果，不伪造道路几何。
 
@@ -63,7 +64,9 @@ Supabase 使用 `trips(id uuid, owner_id uuid, data jsonb, revision int, created
 
 Supabase Auth 邮箱密码登录。个人用户在后台建立，关闭新用户注册。客户端仅用 Publishable Key，数据库所有 CRUD 都受 owner RLS 控制。SQL 额外检查 aggregate 内部 owner/trip/path 绑定。Storage Bucket private，按 `auth.uid()/tripId/photoId` 目录限制 SELECT/INSERT/UPDATE/DELETE，允许 JPG/PNG/WebP、最大8MB。
 
-开始 / 结束锚点仅由显式文件入口触发本机解析，普通附件不解析；可选 endPlaceId 与 anchorRole 保存两端和照片角色，v1 备份重绑定两端引用。解析结果只预填有效部分，用户可手动修改；带偏移换算为节点 IANA 时区，无偏移保留钟点并提示。详细规则见 AI 指南第 7.0 节。
+开始 / 结束锚点仅由显式文件入口触发本机解析，普通附件不解析；可选 endPlaceId 与 anchorRole 保存两端和照片角色，v1 备份重绑定两端引用。解析结果只预填有效部分，用户可手动修改；带偏移换算为节点 IANA 时区，无偏移保留钟点并提示。GPS 通过 reverse 查询附近地名，保留原坐标，失败回退供手填。详细规则见 AI 指南第 7.0 节。
+
+新建 / 编辑旅行的 PhotoAutoMode 显式解析全部选入照片：元数据与压缩草稿 → UTC 排序、首坐标半径与相邻时间间隔分组 → 首尾锚点与全附件 → 地名查询与用户纠错 → 完整文档预校验 → 写新照片 → 一次追加保存。默认 200 米 / 90 分钟；无 GPS 形成独立随记，时间缺失须纠正或排除。组内中间图片全部保留。每批 200 张 / 压缩 80 MiB，单记录上限 200 张。已有记录保留，生成记录继续使用标准编辑 / 地图 / 备份。失败补偿及云端不明确保存按上述边界处理，无模型 / 备份版本迁移。
 
 照片 Canvas 压缩后作为 Blob 暂存，保存记录时先上传/写附件，再保存文档；上传阶段失败或本地提交失败时补偿删除新文件。云端提交请求可能已经成功但响应丢失，因此提交结果不明确时保留已上传文件，避免误删已被引用的照片；同一编辑窗口重试会复用已上传文件。删除先保存引用变化再清理对象；断网清理失败提示。跨服务不具有分布式事务，异常退出可能留下孤立私有对象，README 说明人工清理方式。
 
@@ -79,4 +82,4 @@ HTML 报告逐字段转义，使用禁止脚本和网络资源的 CSP；报告�
 
 核心时间/验证/CRUD是纯函数测试；真实 IndexedDB 仿真测试持久化；RTL 测表单提交与 API 错误；Provider 用官方返回形状模拟，并明确不冒充真实网络响应。PGlite 运行实际 PostgreSQL 迁移、用户角色、RLS、版本更新与私有对象策略，Auth / Storage 元表用最小 stub 模拟。Playwright 对生产构建验证完整桌面/手机操作及 Pages 子路径。
 
-线上 Supabase Auth / Storage 与 Geoapify 仍需真实项目和 Key 做集成验收。生产部署前应按 TESTING.md 的凭据验收清单操作。
+真实 Supabase Auth / Storage 仍未配置；Geoapify 既有服务验收见 TESTING。按用户约定，本次及后续默认只做必要本地检查并正常发布，不进行正式网站交互或真实反向地名 API 验收，除非用户明确要求。

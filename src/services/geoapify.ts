@@ -6,6 +6,7 @@ export type PlaceResult = Pick<
 >;
 export interface PlaceProvider {
   search(query: string, language: string, signal?: AbortSignal): Promise<PlaceResult[]>;
+  reverse(latitude: number, longitude: number, language?: string): Promise<PlaceResult>;
   walk(
     origin: Place,
     destination: Place
@@ -14,6 +15,7 @@ export interface PlaceProvider {
   >;
 }
 export const geoKey = import.meta.env.VITE_GEOAPIFY_API_KEY as string | undefined;
+const reverseCache = new Map<string, Promise<PlaceResult>>();
 const routeCache = new Map<string, Awaited<ReturnType<PlaceProvider['walk']>>>();
 async function request(path: string, params: Record<string, string>, signal?: AbortSignal) {
   if (!geoKey) throw new Error('未配置 Geoapify Key，可手动输入地点和坐标');
@@ -66,12 +68,49 @@ export const geoapify: PlaceProvider = {
       )
     );
     return data.features.map(({ properties: p }) => ({
-      name: p.name || p.address_line1 || p.formatted,
+      name: (p.name || p.address_line1 || p.formatted).slice(0, 300),
       address: p.formatted,
       latitude: p.lat,
       longitude: p.lon,
       providerPlaceId: p.place_id,
     }));
+  },
+  async reverse(latitude, longitude, language = 'zh') {
+    z.number().min(-90).max(90).parse(latitude);
+    z.number().min(-180).max(180).parse(longitude);
+    const key = `${latitude.toFixed(5)},${longitude.toFixed(5)}|${language}`;
+    if (!reverseCache.has(key)) {
+      const pending = (async () => {
+        const data = searchResponse.parse(
+          await request(
+            'geocode/reverse',
+            {
+              lat: String(latitude),
+              lon: String(longitude),
+              lang: language,
+              limit: '1',
+              format: 'geojson',
+            },
+            AbortSignal.timeout(8000)
+          )
+        );
+        const p = data.features[0]?.properties;
+        if (!p) throw new Error('该坐标未查到地名，请手动填写');
+        return {
+          name: (p.name || p.address_line1 || p.formatted).slice(0, 300),
+          address: p.formatted,
+          // Reverse geocoding may snap to a nearby address. Keep the actual photo GPS.
+          latitude,
+          longitude,
+          providerPlaceId: p.place_id,
+        };
+      })();
+      reverseCache.set(key, pending);
+      pending.catch(() => reverseCache.delete(key));
+      if (reverseCache.size > 300) reverseCache.delete(reverseCache.keys().next().value!);
+    }
+    const result = await reverseCache.get(key)!;
+    return { ...result, latitude, longitude };
   },
   async walk(origin, destination) {
     const key = `${origin.latitude},${origin.longitude}|${destination.latitude},${destination.longitude}`;

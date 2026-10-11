@@ -32,7 +32,7 @@ import {
 import { localInput, sorted, toUtc, duration } from '../lib/time';
 import { message } from '../lib/utils';
 import { geoapify, roughWalk } from '../services/geoapify';
-import { compressPhoto } from '../services/media';
+import { compressPhoto, MAX_ENTRY_PHOTOS } from '../services/media';
 import { readAnchorMetadata, anchorTimeInput } from '../services/photoMetadata';
 import { putPhoto, deletePhotos, LOCAL_OWNER } from '../services/repository';
 const MapDialog = lazy(() => import('./map/MapDialog'));
@@ -205,8 +205,8 @@ export function EntryForm({
     setPhotoBusy(true);
     setError('');
     try {
-      if (files.length + pending.length + photos.length > 12)
-        throw new Error('每条记录最多 12 张照片');
+      if (files.length + pending.length + photos.length > MAX_ENTRY_PHOTOS)
+        throw new Error(`每条记录最多 ${MAX_ENTRY_PHOTOS} 张照片`);
       const staged: Pending[] = [];
       for (const file of files)
         staged.push({ id: uuid(), blob: await compressPhoto(file), caption: '' });
@@ -224,8 +224,8 @@ export function EntryForm({
     setPhotoBusy(true);
     setError('');
     try {
-      if (pending.length + photos.length >= 12)
-        throw new Error('每条记录最多 12 张照片，请先移除不需要的附件');
+      if (pending.length + photos.length >= MAX_ENTRY_PHOTOS)
+        throw new Error(`每条记录最多 ${MAX_ENTRY_PHOTOS} 张照片，请先移除不需要的附件`);
       const metadata = await readAnchorMetadata(file);
       const blob = await compressPhoto(file);
       const notices = [...metadata.warnings];
@@ -252,7 +252,7 @@ export function EntryForm({
             Math.abs(p.latitude - latitude) < 0.0000001 &&
             Math.abs(p.longitude - longitude) < 0.0000001
         );
-        const place: Place = existing || {
+        let place: Place = existing || {
           id: uuid(),
           ownerId: doc.trip.ownerId,
           tripId: doc.trip.id,
@@ -262,7 +262,16 @@ export function EntryForm({
           longitude,
           category: 'place',
         };
-        if (!existing) setDraftPlaces((places) => [...places, place]);
+        if (!existing || /^(开始|结束)?照片地点(?:（待核对）)?$/.test(existing.name)) {
+          try {
+            const named = await geoapify.reverse(latitude, longitude);
+            place = { ...place, ...named };
+            notices.push(`已识别地名：${place.name}；请核对是否为实际拍摄地点`);
+          } catch (e) {
+            notices.push(`地名暂未识别：${message(e)}；已保留 GPS 坐标`);
+          }
+        }
+        setDraftPlaces((places) => [...places.filter((p) => p.id !== place.id), place]);
         if (role === 'start') {
           setPlaceId(place.id);
           setOriginId(place.id);
@@ -437,6 +446,22 @@ export function EntryForm({
       setBusy(false);
     }
   }
+  async function identifyPlace(id: string) {
+    const place = find(id);
+    if (!place || processingPhoto.current) return;
+    processingPhoto.current = true;
+    setPhotoBusy(true);
+    setError('');
+    try {
+      const named = await geoapify.reverse(place.latitude, place.longitude);
+      setDraftPlaces((items) => [...items.filter((p) => p.id !== id), { ...place, ...named }]);
+    } catch (e) {
+      setError(message(e));
+    } finally {
+      processingPhoto.current = false;
+      setPhotoBusy(false);
+    }
+  }
   const locationButton = (
     kind: 'place' | 'origin' | 'destination' | 'endPlace',
     value: string,
@@ -470,6 +495,11 @@ export function EntryForm({
           地图选点
         </Button>
       </div>
+      {find(value) && /^(开始|结束)?照片地点(?:（待核对）)?$/.test(find(value)!.name) && (
+        <Button type="button" variant="ghost" onClick={() => void identifyPlace(value)}>
+          识别地名
+        </Button>
+      )}
       {find(value) && (
         <p className="small muted">
           {find(value)!.address ||
@@ -776,7 +806,10 @@ export function EntryForm({
             </label>
             <div className="section-label">
               <span>
-                照片 <span className="muted">{photos.length + pending.length} / 12</span>
+                照片{' '}
+                <span className="muted">
+                  {photos.length + pending.length} / {MAX_ENTRY_PHOTOS}
+                </span>
               </span>
               <label className="upload-label">
                 <ImagePlus size={16} />

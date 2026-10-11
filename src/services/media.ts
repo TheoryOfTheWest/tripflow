@@ -1,3 +1,4 @@
+export const MAX_ENTRY_PHOTOS = 200;
 export function validatePhotoFile(file: File) {
   if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type))
     throw new Error('请选择 JPG、PNG 或 WebP 图片');

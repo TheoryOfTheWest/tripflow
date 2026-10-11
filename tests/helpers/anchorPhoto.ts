@@ -40,10 +40,11 @@ export function anchorJpeg(jpeg: Buffer, date?: string, offset?: string, gps?: [
   ifd(64, [...(date ? [ascii(0x9003, date)] : []), ...(offset ? [ascii(0x9011, offset)] : [])]);
   if (gps) {
     const dms = (v: number) => {
-      const a = Math.abs(v),
-        d = Math.floor(a),
-        m = Math.floor((a - d) * 60);
-      return [d, m, (a - d - m / 60) * 3600];
+      const units = Math.round(Math.abs(v) * 3600 * 1000000);
+      const degrees = Math.floor(units / 3600000000);
+      const remainder = units - degrees * 3600000000;
+      const minutes = Math.floor(remainder / 60000000);
+      return [degrees, minutes, (remainder - minutes * 60000000) / 1000000];
     };
     ifd(128, [
       ascii(1, gps[0] < 0 ? 'S' : 'N'),

@@ -1,6 +1,6 @@
 # TripFlow：AI 项目架构与改进指南
 
-适用版本：`package.json` 1.2.0 · 代码快照日期：2026-10-12 · 文档版本：1.2
+适用版本：`package.json` 1.3.0 · 代码快照日期：2026-10-12 · 文档版本：1.3
 
 本电脑项目位置：`D:\trip flow`。1.0.1 完成目录迁移与版本管理；1.0.2 增加个人主页挂载发布和无账户服务时的直接使用入口。启动、GitHub Desktop 同步及版本记录见 [运行部署与版本管理](运行部署与版本管理.md)。
 
@@ -51,7 +51,7 @@ flowchart TD
   H --> D[(Supabase trips JSONB + RLS)]
   H --> S[(私有 Storage 照片)]
   UI --> M[按需加载的 Leaflet 弹窗]
-  M --> G[可选 Geoapify 搜索 / 瓦片 / 步行]
+  M --> G[可选 Geoapify 搜索 / 瓦片 / 步行 / 反向地名]
   UI --> B[JSON / ZIP 备份与 HTML 报告]
 ```
 
@@ -76,7 +76,8 @@ src/
     useTrips.ts                 读取与更新当前账户的文档状态
     usePhoto.ts                 私有 Blob → object URL；生命周期结束时回收
   components/
-    TripForm.tsx                新建 / 编辑旅行及封面
+    TripForm.tsx                新建 / 编辑旅行、模式与批量确认提交
+    PhotoAutoMode.tsx           全照片解析草稿、分组、纠错和锚点选择
     EntryForm.tsx               三类记录、独立时区、路线、照片提交
     AnchorPhotos.tsx            明确的开始 / 结束锚定照片选择与结果提示
     AuthDialog.tsx              邮箱密码登录；缺配置时提示本地模式
@@ -87,9 +88,10 @@ src/
     ui/                         Button / Modal
   services/
     repository.ts              IndexedDB、Supabase CRUD、照片读写和缓存清理
-    geoapify.ts                 PlaceProvider、搜索、步行缓存、粗估
+    geoapify.ts                 PlaceProvider、搜索、反向地名、步行缓存、粗估
     media.ts                    图片验证、Canvas 缩放与重编码
     photoMetadata.ts            按需 EXIF 解析、严格时间 / GPS 校验和时区预填
+    photoTimeline.ts            照片分组、地名查询、锚点纠正及追加文档
     backup.ts                   JSON / ZIP 验证、导出、重绑定导入
     report.ts                   转义后的独立 HTML 报告
 supabase/migrations/             PostgreSQL 初始迁移、RLS、Storage 策略
@@ -227,17 +229,33 @@ readonly 条件为云端账户且浏览器离线或当前数据来自失败回�
 
 ## 7. 照片提交与故障语义
 
-### 7.0 明确选择锚定照片才解析（1.2.0）
+### 7.0 手动记录的明确锚点解析（1.2.0 引入，1.3.0 加入地名）
 
-`AnchorPhotos` 只负责开始 / 结束单张文件入口和提示；`EntryForm.uploadAnchor` 独立调用 `readAnchorMetadata`，普通 `upload` 仅调用 `compressPhoto`。不要把解析移入通用压缩、照片读取、备份导入或附件批量上传，否则会违反用户只解析明确锚点的要求。
+`AnchorPhotos` 只负责开始 / 结束单张文件入口和提示；`EntryForm.uploadAnchor` 独立调用 `readAnchorMetadata`，普通 `upload` 仅调用 `compressPhoto`。不要把解析移入通用压缩、照片读取、备份导入或普通附件上传。1.3.0 的明确批量模式是例外：用户主动选择此模式后，解析该批所有照片，见 7.0.1。
 
-`photoMetadata.ts` 动态加载 [exifr 7.1.3](https://github.com/MikeKovarik/exifr)，仅选取拍摄日期、对应 UTC 偏移及 GPS 标签。`reviveValues: false` 保留原始钟点字符串，避免浏览器本地时区污染。优先 DateTimeOriginal，其次 CreateDate；没有拍摄时间时允许 GPS UTC 日期时间回退。不使用 ModifyDate、文件名、mtime、OCR 或反向地理编码。严格校验日历、24 点、时差上限、DMS 范围和方向；没有完整 GPS 不填坐标，零坐标有效。解析失败仍允许将能解码的图片作为锚定附件保存。
+`photoMetadata.ts` 动态加载 [exifr 7.1.3](https://github.com/MikeKovarik/exifr)，仅选取拍摄日期、对应 UTC 偏移及 GPS 标签。`reviveValues: false` 保留原始钟点字符串，避免浏览器本地时区污染。优先 DateTimeOriginal，其次 CreateDate；没有拍摄时间时允许 GPS UTC 日期时间回退。元数据读取不使用 ModifyDate、文件名、mtime 或 OCR；地名查询由上层显式调用，不混入元数据读取器。严格校验日历、24 点、时差上限、DMS 范围和方向；没有完整 GPS 不填坐标，零坐标有效。解析失败仍允许将能解码的图片作为锚定附件保存。
 
-有效偏移先转 UTC，再显示为当前节点 IANA 时区，并保留秒和 DST 偏移选择；没有偏移则只预填钟点，提示按表单时区解释，继续沿用已有 DST 校验。自动填写时间 / 地点相互独立，未知部分不清空原值。先解析和成功压缩，再应用字段。复用相同坐标地点，否则建立坐标占位名称，用户可手动改名定位；不从经纬度猜时区或景点。
+有效偏移先转 UTC，再显示为当前节点 IANA 时区，并保留秒和 DST 偏移选择；没有偏移则只预填钟点，提示按表单时区解释，继续沿用已有 DST 校验。自动填写时间 / 地点相互独立，未知部分不清空原值。先解析和成功压缩，再应用字段。复用相同坐标地点；新地点或旧占位地名调用 Geoapify reverse 查询名称，失败保留坐标与占位提示。旧占位记录可点击“识别地名”再保存。自定义已有地名保留；不从经纬度猜时区或无依据的景点。
 
 新增可选字段 `Photo.anchorRole?: 'start' | 'end'` 与停留记录 `Entry.endPlaceId?`。文档校验限定每记录每角色一张、必须关联记录、moment 不得有结束锚点。交通使用已有起终点引用；停留使用 placeId / endPlaceId，地图与报告包含两端，结束点时间取 endAtUtc。替换锚点保留旧图为普通附件；转 moment 降级结束锚点；删除照片不回滚手动可编辑的节点字段。保存时锚定照片 takenAt 跟随最终节点，原有普通照片 takenAt 保持不变。
 
-字段为 JSONB / IndexedDB 文档的可选增量，不改变数据库表、Dexie 版本和 v1 备份版本；旧数据继续通过校验，导入时重绑定 endPlaceId，照片角色随照片对象保留。旧于 1.2.0 的应用可能忽略新增字段，完整保留需使用新版本恢复。原图只在本机解析，保存图片仍由 Canvas 去除 EXIF；已确认的时间 / 坐标属于旅行文档内容。单记录 12 张限额包括所有锚点，异步处理中防止重复上传 / 保存，继续遵守原有照片补偿语义。
+字段为 JSONB / IndexedDB 文档的可选增量，不改变数据库表、Dexie 版本和 v1 备份版本；旧数据继续通过校验，导入时重绑定 endPlaceId，照片角色随照片对象保留。旧于 1.2.0 的应用可能忽略新增字段，完整保留需使用新版本恢复。原图只在本机解析，保存图片仍由 Canvas 去除 EXIF；已确认的时间 / 坐标属于旅行文档内容。单记录 200 张限额包括所有锚点，异步处理中防止重复上传 / 保存，继续遵守原有照片补偿语义。
+
+### 7.0.1 上传照片自动解析模式（1.3.0）
+
+`TripForm` 在新建和编辑旅行中提供手动 / 自动模式；`PhotoAutoMode` 管理显式选择的全批照片与可编辑草稿，`photoTimeline.ts` 提供纯分组和文档追加函数。`parseDraftPhoto` 先本机读取元数据再压缩，不在此阶段写持久化附件；上传前固定默认 IANA 时区，已有草稿时禁改时区，清空后可改。异步处理串行压缩并锁住表单，支持停止后续处理及部分草稿，不静默吞掉失败文件。
+
+分组将拍摄钟点与偏移转成真实 UTC 排序，稳定保留同刻文件顺序；缺失 / 无效时间与 DST 歧义进入待纠正列表。默认与本组首坐标距离不超过 200 米、相邻 UTC 间隔不超过 90 分钟才合并（半径 1–5000 米、间隔 1–1440 分钟可调）。首坐标约束防止逐张相近却整体漂移；离开后返回分新组。无 GPS 的照片单独生成 moment，不推测地点。组内只首尾照片有 anchorRole；同刻仅开始锚点，其余照片保留真实解析时间作为附件。
+
+`namePhotoGroups` 查询组的两端地名；组间串行、组内最多两个请求，首次服务失败后停止余组请求并保留坐标，支持手动重试。更换某端锚点只查询该端有 GPS 的新图，保留另一端的手动修正；移除锚点不移除文件或清空字段。可纠正照片时间 / 偏移 / 坐标、排除整张照片或整组；这些变更标 dirty，必须重新分组。重新分组明确提示覆盖尚未保存的组级编辑。组级名称、时间、地点与备注可以直接修改。
+
+`appendPhotoTimeline` 要求每张未排除照片恰好分到一个组、无未解决时间、无重复或外部引用，验证锚点 / UTC / 地点与完整 documentSchema。区间生成 stay，单时刻生成 moment；不推断交通和缺失时段。原旅行记录与 revision 保留，只追加新记录并扩展日期范围；新旅行可自动名称 / 日期。每批最多 200 张，每次原图选择 1 GiB、草稿压缩总量 80 MiB；每记录附件上限改为共享 MAX_ENTRY_PHOTOS=200。全旅行和 ZIP 的既有容量限制仍适用，不保证任意多批都可合成一个可恢复备份。
+
+确认时先完整建模校验，再串行 putPhoto，再一次 onSave 文档。稳定 trip / photo / group ID 方便本地失败重试；上传或本地提交失败清理本次已写附件并保留草稿。云端提交响应不明确时保留照片、冻结当前表单，提示关闭并刷新核对，避免生成重复记录；继续使用 revision 冲突保护。保存后的普通记录编辑、地图、归档和 v1 导入无需新格式。本版本不新增 SQL / Dexie 迁移或依赖。
+
+### 7.0.2 GPS 地名查询边界
+
+`PlaceProvider.reverse` 调用 Geoapify `/v1/geocode/reverse`，中文、单结果、8 秒超时；Zod 检查结果，仅采用名称 / 地址，保留请求的原始 GPS，不让服务吸附坐标改写照片位置。Promise 缓存最多 300 项，键为语言及 5 位小数坐标；失败移除缓存，近坐标命中后仍还原各自的精确坐标。无服务 / 失败回退坐标，不猜 POI。返回附近道路或建筑不一定是实际拍摄景点，UI 要求用户核对。原图不离开浏览器解析流程，但查询地名会把 GPS 发送给地图服务，隐私说明不能继续宣称“不调用地图 API”。
 
 ### 7.1 正常流程
 
@@ -252,7 +270,7 @@ readonly 条件为云端账户且浏览器离线或当前数据来自失败回�
   → 最后删除不再引用的旧图片
 ```
 
-普通上传支持 JPG / PNG / WebP，原图最多 20 MB，解码图片有像素上限，每记录最多 12 张。Storage 允许的文件为 JPG / PNG / WebP、单张最多 8 MiB。
+普通上传支持 JPG / PNG / WebP，原图最多 20 MB，解码图片有像素上限，每记录最多 200 张。Storage 允许的文件为 JPG / PNG / WebP、单张最多 8 MiB。
 
 照片读取由 `getPhotoBlob` 优先查缓存，再用已认证 Storage download 下载，通过 `usePhoto` 创建 object URL。URL 及时回收；JSON 中只存稳定路径，不保存 object URL、公开链接或会过期的签名链接。
 

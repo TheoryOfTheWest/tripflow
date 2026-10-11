@@ -87,3 +87,57 @@ describe('map providers and route projection', () => {
     await expect(geoapify.search('大阪', 'zh')).rejects.toThrow('429');
   });
 });
+
+it('reverse geocodes a real name, caches coordinates and preserves original GPS rather than snapped address coordinates', async () => {
+  vi.stubEnv('VITE_GEOAPIFY_API_KEY', 'synthetic-key');
+  const fetcher = vi
+    .fn()
+    .mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        features: [
+          {
+            properties: {
+              name: '虚构公园',
+              formatted: '测试城市 · 虚构公园',
+              lat: 35.1,
+              lon: 135.1,
+              place_id: 'reverse-id',
+            },
+          },
+        ],
+      }),
+    });
+  vi.stubGlobal('fetch', fetcher);
+  const { geoapify } = await import('../src/services/geoapify');
+  const first = await geoapify.reverse(35.000001, 135.000001);
+  expect(first).toMatchObject({ name: '虚构公园', latitude: 35.000001, longitude: 135.000001 });
+  const second = await geoapify.reverse(35.000002, 135.000002);
+  expect(second.latitude).toBe(35.000002);
+  expect(fetcher).toHaveBeenCalledTimes(1);
+  const url = new URL(fetcher.mock.calls[0][0]);
+  expect(url.pathname).toBe('/v1/geocode/reverse');
+  expect(url.searchParams.get('lang')).toBe('zh');
+});
+it('does not cache failed or empty reverse results, allowing an explicit retry', async () => {
+  vi.stubEnv('VITE_GEOAPIFY_API_KEY', 'synthetic-key');
+  const fetcher = vi
+    .fn()
+    .mockResolvedValueOnce({ ok: false, status: 429 })
+    .mockResolvedValueOnce({ ok: true, json: async () => ({ features: [] }) })
+    .mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        features: [
+          { properties: { address_line1: '测试路', formatted: '测试路 1 号', lat: 0, lon: 0 } },
+        ],
+      }),
+    });
+  vi.stubGlobal('fetch', fetcher);
+  const { geoapify } = await import('../src/services/geoapify');
+  await expect(geoapify.reverse(0, 0)).rejects.toThrow('429');
+  await expect(geoapify.reverse(0, 0)).rejects.toThrow('未查到');
+  expect((await geoapify.reverse(0, 0)).name).toBe('测试路');
+  await expect(geoapify.reverse(91, 0)).rejects.toThrow();
+  expect(fetcher).toHaveBeenCalledTimes(3);
+});

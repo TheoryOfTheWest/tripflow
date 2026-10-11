@@ -56,14 +56,21 @@ npm run preview          # 在 HTTP 服务中预览生产版本
 - 九种交通方式；运营商、线路、上下车站、换乘备注、线路历史；换乘可拆成多条记录。
 - 主动计算步行路线、同参数缓存；服务不可用时使用可配置速度的直线粗估，并明确说明局限；估计耗时与实际耗时独立保存。
 - 每日/全程地图、按时间编号、交通站点方形标记、地图返回对应记录。道路实线、用户 GeoJSON GPS 轨迹、顺序虚线明确区分。
-- 开始 / 结束锚定照片在本机提取有效拍摄时间与 GPS，独立预填对应节点；普通附件不解析，缺失信息保留原值。
+- 开始 / 结束锚定照片在本机提取有效拍摄时间与 GPS，识别附近地名并独立预填对应节点；普通附件不解析，缺失信息保留原值。
+- 新建 / 编辑旅行提供“上传照片自动解析模式”：全部选入照片按 UTC 排序，连续同地点照片合并为首尾锚点，生成可纠错、可编辑的时间线。
 - 多图压缩、说明编辑、删除、预览；Canvas 重编码去掉 EXIF/GPS。照片关联活动、交通或独立瞬间。
 - Supabase 邮箱密码登录、每用户私有 RLS、私有 Storage；每段旅行版本冲突检查、本地缓存、离线只读云端内容。
 - JSON 备份与校验导入；含实际照片的完整 ZIP；HTML 旅行报告与打印/PDF。HTML 输出转义用户文字，不执行导入 HTML。
 
-## 用照片填写节点（1.2.0）
+## 照片自动生成旅程（1.3.0）
 
-新增或编辑记录时，先选择“开始锚定照片 / 结束锚定照片”，根据能提取到的时间、GPS 预填对应字段；核对时区、地点后保存。下方“添加照片”仅添加普通附件，不解析或改动节点。只有一个时间点的“照片 / 备注”只提供开始锚定。具体限制、缺失信息与备份规则见 [用户说明第 7 节](docs/用户使用说明书.md#7-照片与独立随记)。不需要新 API 或账户配置。
+新建旅行或“编辑旅行” → **上传照片自动解析模式** → 设置默认时区、选择照片 → 核对自动草稿 → **确认生成并保存旅行**。默认按同地点 200 米、连续拍摄间隔 90 分钟合并，只选择首尾锚点，中间照片保留为附件。支持替换 / 移除锚点、纠正时间与坐标、排除照片和修改各段内容；已保存记录可继续正常编辑，已有旅行追加记录。缺失拍摄时间须纠正或暂不导入，不猜测交通或未知地点。
+
+锚定照片和此模式会使用现有 Geoapify 配置查询附近地名 / 地址，保持照片实际坐标；网络失败保留坐标供手填。原图在本机解析，GPS 会发送到地图服务。每批 200 张、每次原图合计 1 GB、压缩草稿 80 MB，较大旅程分批追加；整段备份仍遵守原容量上限。完整操作见 [用户说明第 3.3 节](docs/用户使用说明书.md#33-上传照片自动解析模式130)。
+
+## 用照片填写节点（1.2.0 引入）
+
+新增或编辑记录时，先选择“开始锚定照片 / 结束锚定照片”，根据能提取到的时间、GPS 预填对应字段；核对时区、地点后保存。下方“添加照片”仅添加普通附件，不解析或改动节点。只有一个时间点的“照片 / 备注”只提供开始锚定。具体限制、缺失信息与备份规则见 [用户说明第 7 节](docs/用户使用说明书.md#7-照片与独立随记)。拍摄信息解析不需账户；1.3.0 的地名查询使用现有地图配置。
 
 ## 完成旅程后保存到电脑（1.1.0）
 
@@ -98,11 +105,12 @@ VITE_BASE_PATH=/tripflow/
 
 1.0.3 个人网站发布已配置 Geoapify 浏览器 Key，真实接口验收结果见 TESTING。更新这个 Key 后需重新构建并执行个人网站挂载发布；仅重启本地服务或推送源码不会更新已发布网站。
 
-在 Geoapify 创建项目并启用地图瓦片、地址自动补全和 Routing API；把浏览器 Key 填入 `VITE_GEOAPIFY_API_KEY`，重启/重新构建。设置允许的 HTTP Referer / Origin，包含实际 GitHub Pages 来源和你需要的本地开发来源，并设置配额提醒。浏览器 Key 是公开的，不能以隐藏前端 Key 代替来源限制。
+在 Geoapify 创建项目并启用地图瓦片、地址自动补全、反向地理编码和 Routing API；把浏览器 Key 填入 `VITE_GEOAPIFY_API_KEY`，重启/重新构建。设置允许的 HTTP Referer / Origin，包含实际 GitHub Pages 来源和你需要的本地开发来源，并设置配额提醒。浏览器 Key 是公开的，不能以隐藏前端 Key 代替来源限制。
 
 实现使用：
 
 - `GET /v1/geocode/autocomplete?text=...&lang=zh|en|ja&limit=6&format=geojson`
+- `GET /v1/geocode/reverse?lat=...&lon=...&lang=zh&limit=1&format=geojson`（照片地名）
 - `GET /v1/routing?waypoints=lat,lon|lat,lon&mode=walk&units=metric&format=geojson`
 - `https://maps.geoapify.com/v1/tile/osm-bright/{z}/{x}/{y}.png`
 
@@ -129,7 +137,7 @@ VITE_BASE_PATH=/tripflow/
 - 完整 ZIP 必须成功读取每张实际照片才导出；缺图就报错，避免产生假完整备份。ZIP 包含 `tripflow.json` 和 `photos/<photoId>`。
 - 导入先做 Zod / 引用 / 账户 / 日期 / 图片类型校验，生成新 ID 并重绑定所有引用；不会覆盖现有旅行。导入含多旅行时逐旅行提交，途中失败会提示已经成功的数量，刷新即可查看。
 - 单次导入压缩文件上限 100MB、解压上限 200MB、最多 5001 个数据/照片文件（收藏包另加 2 个固定阅读文件）；单张备份照片上限 8MB（与 Storage 一致）。大旅行可分批保管；当前不做流式超大 ZIP。
-- 上传原图限 JPG/PNG/WebP、20MB，压缩至最长边 1800px；每记录最多 12 张照片。HEIC 请先转换。
+- 上传原图限 JPG/PNG/WebP、20MB，压缩至最长边 1800px；每记录最多 200 张照片。HEIC 请先转换。
 - 删除先提交元数据，再清理图片；清理失败会提示。若中途断网或页面关闭，可能留下私有孤立对象，需要在 Supabase Storage 管理页面人工清理。
 - 云端保存响应丢失时会保留已上传照片，避免删除可能已经提交的引用；请刷新核对后重试。同一编辑窗口重试不会重复上传这些照片。
 - 浏览器缓存依赖当前来源；localhost、不同端口及 GitHub Pages 互不共享。本地模式不跨设备同步。浏览器清理站点数据会删除本地记录，务必备份。
@@ -146,6 +154,6 @@ VITE_BASE_PATH=/tripflow/
 官方文档核对日期：2026-10-11。
 
 - [Vite](https://vite.dev/guide/)、[Tailwind Vite](https://tailwindcss.com/docs/installation/using-vite)、[React Leaflet](https://react-leaflet.js.org/docs/start-installation/)
-- [Geoapify 自动补全](https://apidocs.geoapify.com/docs/geocoding/address-autocomplete/)、[Routing](https://apidocs.geoapify.com/docs/routing/)、[地图瓦片与署名](https://apidocs.geoapify.com/docs/maps/map-tiles/)
+- [Geoapify 自动补全](https://apidocs.geoapify.com/docs/geocoding/address-autocomplete/)、[反向地理编码](https://apidocs.geoapify.com/docs/geocoding/reverse-geocoding/)、[Routing](https://apidocs.geoapify.com/docs/routing/)、[地图瓦片与署名](https://apidocs.geoapify.com/docs/maps/map-tiles/)
 - [Supabase Key](https://supabase.com/docs/guides/getting-started/api-keys)、[Storage 权限](https://supabase.com/docs/guides/storage/security/access-control)、[数据库安全](https://supabase.com/docs/guides/database/secure-data)
 - [Luxon](https://moment.github.io/luxon/api-docs/index.html)、[GitHub Pages Actions](https://docs.github.com/en/pages/getting-started-with-github-pages/using-custom-workflows-with-github-pages)
